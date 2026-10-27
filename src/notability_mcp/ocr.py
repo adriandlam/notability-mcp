@@ -29,8 +29,9 @@ def recognize(png: bytes) -> list[Line]:
     data = NSData.dataWithBytes_length_(png, len(png))
     handler = Vision.VNImageRequestHandler.alloc().initWithData_options_(data, None)
     ok, error = handler.performRequests_error_([request], None)
-    if not ok:  # the Neural Engine path fails (e5rtError) while macOS recompiles its models
-        _use_cpu(request)
+    if not ok:
+        # revision 3 can fail with e5rtError for long stretches; revision 2 is a separate engine
+        request.setRevision_(Vision.VNRecognizeTextRequestRevision2)
         ok, error = handler.performRequests_error_([request], None)
     if not ok:
         raise RuntimeError(f"Vision text recognition failed: {error}")
@@ -46,12 +47,3 @@ def recognize(png: bytes) -> list[Line]:
         lines.append(Line(str(candidates[0].string()), float(candidates[0].confidence()), box))
     lines.sort(key=lambda line: (round(line.box[1], 2), line.box[0]))
     return lines
-
-
-def _use_cpu(request) -> None:
-    import Vision
-
-    devices, _ = request.supportedComputeStageDevicesAndReturnError_(None)
-    for device in (devices or {}).get(Vision.VNComputeStageMain, []):
-        if device.className() == "MLCPUComputeDevice":
-            request.setComputeDevice_forComputeStage_(device, Vision.VNComputeStageMain)
