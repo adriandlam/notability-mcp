@@ -26,3 +26,8 @@ def test_rga_orders_newest_sibling_first():
     a, b, c = (1, 1, 0), (1, 1, 1), (2, 5, 0)
     # "ab" typed, then "c" inserted after "a" by a later op: a c b
     assert linearize([(a, None), (b, a), (c, a)]) == [a, c, b]
+
+
+def test_rga_survives_an_anchor_cycle():
+    a, b = (1, 1, 0), (1, 2, 0)
+    assert linearize([(a, None), (b, a), (a, b)]) == [a, b]

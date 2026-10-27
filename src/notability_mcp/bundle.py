@@ -36,6 +36,7 @@ class _Op(IntEnum):
 
 HIGHLIGHTER = 2  # CreateInk.tool
 DEFAULT_PAGE_SIZE = (612.0, 792.0)
+_MAX_PAGES_PER_OP = 10_000  # bounds a corrupt or hostile pageCount
 _ID, _SEQ = struct.Struct("<H2xI"), struct.Struct("<H2xII")
 _PAIR, _RGBA, _HASH = struct.Struct("<ff"), struct.Struct("<4B"), struct.Struct("<64s")
 _UUID = struct.Struct("<QQ")
@@ -191,9 +192,13 @@ def linearize(nodes: list[tuple[SeqId, SeqId | None]]) -> list[SeqId]:
     for v in kids.values():
         v.sort(key=lambda n: (-n[1], -n[0], n[2]))
     out: list[SeqId] = []
+    seen: set[SeqId] = set()  # a corrupt log can contain anchor cycles
     stack = list(reversed(kids.get(None, [])))
     while stack:
         n = stack.pop()
+        if n in seen:
+            continue
+        seen.add(n)
         out.append(n)
         stack.extend(reversed(kids.get(n, [])))
     return out
@@ -234,7 +239,7 @@ def build_note(note_id: str, ops: list[tuple[Id, int, _Table]]) -> Note:
                     assets.add(digest)
             case _Op.CREATE_PAGE:
                 prev, bg = p.seq(0), _background(p.table(1))
-                for i in range(p.scalar(2, "<I", 0) or 1):
+                for i in range(min(p.scalar(2, "<I", 0), _MAX_PAGES_PER_OP) or 1):
                     node = (site, ts, i)
                     page_nodes.append((node, prev))
                     page_pos[node] = node
@@ -300,6 +305,7 @@ def build_note(note_id: str, ops: list[tuple[Id, int, _Table]]) -> Note:
                     prev = node
             case _Op.INSERT_CHAR:
                 code = p.scalar(1, "<I", 0xFFFD)
+                code = code if code <= 0x10FFFF else 0xFFFD
                 chars[p.id(2)].append(((site, ts, 0), p.seq(0), chr(code)))
             case _Op.REMOVE_CHAR:
                 if loc := p.seq(0):
@@ -346,16 +352,19 @@ def decode_path(b: bytes) -> list[PathElement]:
     point = struct.Struct("<ee" if b[0] & 7 == 0 else "<ff")
     out: list[PathElement] = []
     p = 3
-    for _ in range(int.from_bytes(b[1:3], "little")):
-        kind = b[p]
-        n = _PATH_POINTS[kind]
-        pts = [point.unpack_from(b, p + 1 + i * point.size) for i in range(n)]
-        p += 1 + n * point.size
-        width = None
-        if kind <= 3:
-            width = struct.unpack_from("<e", b, p)[0]
-            p += 6
-        out.append((kind, pts, width))
+    try:
+        for _ in range(int.from_bytes(b[1:3], "little")):
+            kind = b[p]
+            n = _PATH_POINTS[kind]
+            pts = [point.unpack_from(b, p + 1 + i * point.size) for i in range(n)]
+            p += 1 + n * point.size
+            width = None
+            if kind <= 3:
+                width = struct.unpack_from("<e", b, p)[0]
+                p += 6
+            out.append((kind, pts, width))
+    except (IndexError, KeyError, struct.error):
+        pass  # truncated or unknown element: keep what decoded
     return out
 
 
