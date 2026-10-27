@@ -16,6 +16,7 @@ classifiers = [
 dependencies = [
     "mcp>=2.3,<3",
     "pillow>=12",
+    "pyobjc-framework-vision>=12 ; sys_platform == 'darwin'",
 ]
 
 [project.scripts]
