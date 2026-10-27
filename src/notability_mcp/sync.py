@@ -16,22 +16,21 @@ def _iso(ms: float | None) -> str | None:
 
 
 def parse_library(library: dict) -> tuple[list[Folder], list[NoteMeta]]:
-    """Folders and live notes of the user's private space.
+    """Folders and notes of the user's private space.
 
     ponytail: notes shared with the user (sharedNotes) are skipped; add them when needed.
     """
     space = library.get("privateSpace") or {}
+    # `organizers` is the legacy view of the same rows; `folders` wins where they disagree
+    rows = {r["id"]: r for r in space.get("organizers", []) + space.get("folders", [])}
     folders = [
-        Folder(f["id"], f.get("title") or "Untitled", "folder", f.get("parentId"))
-        for f in space.get("folders", [])
-    ] + [
         Folder(
-            o["id"],
-            o.get("title") or "Untitled",
-            (o.get("organizerType") or "").lower(),
-            o.get("parentId"),
+            r["id"],
+            r.get("title") or "Untitled",
+            (r.get("organizerType") or "folder").lower(),
+            r.get("parentId"),
         )
-        for o in space.get("organizers", [])
+        for r in rows.values()
     ]
     notes = [
         NoteMeta(
@@ -43,7 +42,6 @@ def parse_library(library: dict) -> tuple[list[Folder], list[NoteMeta]]:
             modified_at=_iso(max(n.get("mostRecentOpTime") or 0, n.get("updatedAt") or 0)) or "",
         )
         for n in space.get("notes", [])
-        if not n.get("deletedAt")
     ]
     return folders, notes
 

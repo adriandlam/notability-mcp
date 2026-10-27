@@ -14,9 +14,14 @@ def library(op_time: int) -> dict:
     return {
         "sequenceId": 7,
         "privateSpace": {
-            "folders": [{"id": "f1", "title": "Fall 2026", "parentId": None}],
+            # the same rows twice; `organizers` is the legacy view and calls folders subjects
+            "folders": [
+                {"id": "f1", "title": "Fall 2026", "parentId": None, "organizerType": "Folder"},
+                {"id": "s1", "title": "MATH 300", "parentId": "f1", "organizerType": "Subject"},
+            ],
             "organizers": [
-                {"id": "s1", "title": "MATH 300", "parentId": "f1", "organizerType": "Subject"}
+                {"id": "f1", "title": "Fall 2026", "parentId": None, "organizerType": "Subject"},
+                {"id": "s1", "title": "MATH 300", "parentId": "f1", "organizerType": "Subject"},
             ],
             "notes": [
                 {
@@ -27,13 +32,12 @@ def library(op_time: int) -> dict:
                     "updatedAt": 1790000000000,
                     "mostRecentOpTime": op_time,
                 },
-                {"id": "gone", "title": "Trashed", "updatedAt": 1, "deletedAt": 2},
             ],
         },
     }
 
 
-def test_parse_library_maps_folders_and_skips_deleted_notes():
+def test_parse_library_merges_duplicate_folder_rows():
     folders, notes = parse_library(library(1790000500000))
 
     assert [(f.name, f.kind, f.parent_id) for f in folders] == [
