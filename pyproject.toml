@@ -13,7 +13,10 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Topic :: Text Processing :: Indexing",
 ]
-dependencies = ["mcp>=2.3,<3"]
+dependencies = [
+    "mcp>=2.3,<3",
+    "pillow>=12",
+]
 
 [project.scripts]
 notability-mcp = "notability_mcp.cli:main"

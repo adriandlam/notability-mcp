@@ -1,15 +1,8 @@
-import json
 from pathlib import Path
 
-from notability_mcp.bundle import build_note, decode_bundle, linearize, read_ops
+from notability_mcp.bundle import Note, decode_bundle, linearize
 
 FIXTURES = Path(__file__).parent / "fixtures"
-
-
-def event_ops(name: str):
-    """Ops from a server-acknowledged AppendOpsEvent captured by notability-cli."""
-    fixture = json.loads((FIXTURES / f"{name}.json").read_text())
-    return read_ops(bytes.fromhex(fixture["append_ops_event_hex"]), ops_field=0)
 
 
 def test_typed_text_and_assets_from_bundle():
@@ -20,10 +13,8 @@ def test_typed_text_and_assets_from_bundle():
     assert len(note.assets) == 1
 
 
-def test_streamed_ink_lands_on_the_implicit_first_page():
-    note = build_note("n", event_ops("25_ink_pen") + event_ops("26_ink_add_path"))
-
-    [page] = note.pages
+def test_streamed_ink_lands_on_the_implicit_first_page(ink_note: Note):
+    [page] = ink_note.pages
     [ink] = page.inks
     assert (page.number, page.width, page.height) == (1, 612.0, 792.0)
     assert ink.origin == (80.0, 300.0)

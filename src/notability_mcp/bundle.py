@@ -329,6 +329,36 @@ def build_note(note_id: str, ops: list[tuple[Id, int, _Table]]) -> Note:
     return Note(id=note_id, title=title, pages=pages, text="\n\n".join(blocks), assets=assets)
 
 
+type PathElement = tuple[int, list[tuple[float, float]], float | None]  # (kind, points, width)
+
+_PATH_POINTS = {0: 3, 4: 3, 1: 2, 5: 2, 2: 1, 3: 1, 6: 1, 7: 1}
+
+
+def decode_path(b: bytes) -> list[PathElement]:
+    """Decode an encoded ink path.
+
+    Layout: byte 0 = version << 3 | precision (0 = f16, 1 = f32), u16 element count, then per
+    element a u8 kind and its points. Kinds 0/4 cubic, 1/5 quadratic, 2/6 line, 3/7 move-to;
+    kinds 0-3 append f16 width, f16 force and two u8 pen angles.
+    """
+    if len(b) < 3 or b[0] >> 3 or (b[0] & 7) > 1:
+        return []
+    point = struct.Struct("<ee" if b[0] & 7 == 0 else "<ff")
+    out: list[PathElement] = []
+    p = 3
+    for _ in range(int.from_bytes(b[1:3], "little")):
+        kind = b[p]
+        n = _PATH_POINTS[kind]
+        pts = [point.unpack_from(b, p + 1 + i * point.size) for i in range(n)]
+        p += 1 + n * point.size
+        width = None
+        if kind <= 3:
+            width = struct.unpack_from("<e", b, p)[0]
+            p += 6
+        out.append((kind, pts, width))
+    return out
+
+
 def _page(number: int, pid: SeqId, bg: dict) -> Page:
     page = Page(number, pid, *bg.get("size", DEFAULT_PAGE_SIZE))
     if pdf := bg.get("pdf"):
