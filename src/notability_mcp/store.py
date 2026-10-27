@@ -4,6 +4,7 @@ import os
 import re
 import sqlite3
 import sys
+import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -184,9 +185,23 @@ class NoteRow:
     page_count: int | None  # None until the note's content is indexed
 
 
-def synced_at(con: sqlite3.Connection) -> str | None:
-    row = con.execute("SELECT value FROM meta WHERE key = 'synced_at'").fetchone()
+def get_meta(con: sqlite3.Connection, key: str) -> str | None:
+    row = con.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
     return row[0] if row else None
+
+
+def synced_at(con: sqlite3.Connection) -> str | None:
+    return get_meta(con, "synced_at")
+
+
+def device_id(con: sqlite3.Connection) -> str:
+    """A stable random id for this install, sent with bundle requests like the web app does."""
+    if existing := get_meta(con, "device_id"):
+        return existing
+    new = str(uuid.uuid4())
+    with con:
+        con.execute("INSERT INTO meta VALUES ('device_id', ?)", (new,))
+    return new
 
 
 def folder_paths(con: sqlite3.Connection) -> dict[str, str]:

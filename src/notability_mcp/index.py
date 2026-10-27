@@ -26,6 +26,6 @@ def page_texts(note: Note) -> list[PageText]:
 
 def index_note(con: sqlite3.Connection, note_id: str, bundle: bytes) -> int:
     """Decode, OCR and store one note; returns its page count."""
-    note = decode_bundle(bundle)
+    note = decode_bundle(bundle) if bundle else Note(note_id, None, [], "", set())
     store.save_note(con, note_id, bundle, len(note.pages), page_texts(note))
     return len(note.pages)

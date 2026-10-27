@@ -14,9 +14,11 @@ classifiers = [
     "Topic :: Text Processing :: Indexing",
 ]
 dependencies = [
+    "keyring>=25.7.0",
     "mcp>=2.3,<3",
     "pillow>=12",
     "pyobjc-framework-vision>=12 ; sys_platform == 'darwin'",
+    "websockets>=17.3",
 ]
 
 [project.scripts]
