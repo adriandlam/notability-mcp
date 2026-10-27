@@ -5,9 +5,12 @@ import re
 import sqlite3
 import sys
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import Literal
 
 SCHEMA = """
+CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS folders (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -33,6 +36,9 @@ CREATE VIRTUAL TABLE IF NOT EXISTS page_text USING fts5(
 """
 
 
+type Source = Literal["handwriting", "typed", "pdf", "audio"]
+
+
 @dataclass
 class Folder:
     id: str
@@ -53,7 +59,7 @@ class NoteMeta:
 @dataclass
 class PageText:
     page: int  # 1-based; 0 for note-level typed text
-    source: str  # handwriting, typed, pdf or audio
+    source: Source
     text: str
     confidence: float | None = None
 
@@ -63,7 +69,7 @@ class Hit:
     note_id: str
     title: str
     page: int
-    source: str
+    source: Source
     snippet: str
     score: float
 
@@ -111,6 +117,10 @@ def save_library(con: sqlite3.Connection, folders: list[Folder], notes: list[Not
         marks = ",".join("?" * len(live))
         con.execute(f"DELETE FROM notes WHERE id NOT IN ({marks})", live)
         con.execute(f"DELETE FROM page_text WHERE note_id NOT IN ({marks})", live)
+        con.execute(
+            "INSERT OR REPLACE INTO meta VALUES ('synced_at', ?)",
+            (datetime.now(UTC).isoformat(timespec="seconds"),),
+        )
 
 
 def stale_notes(con: sqlite3.Connection) -> list[str]:
@@ -162,3 +172,59 @@ def search(
     ).fetchall()
     hits = [Hit(n, t, p, s, snip, -score) for n, t, p, s, snip, score in rows[:limit]]
     return hits, len(rows) > limit
+
+
+@dataclass
+class NoteRow:
+    id: str
+    title: str
+    folder: str | None  # folder path, e.g. "Fall 2026 / MATH 300"
+    created_at: str | None
+    modified_at: str
+    page_count: int | None  # None until the note's content is indexed
+
+
+def synced_at(con: sqlite3.Connection) -> str | None:
+    row = con.execute("SELECT value FROM meta WHERE key = 'synced_at'").fetchone()
+    return row[0] if row else None
+
+
+def folder_paths(con: sqlite3.Connection) -> dict[str, str]:
+    rows = {
+        fid: (name, parent)
+        for fid, name, parent in con.execute("SELECT id, name, parent_id FROM folders")
+    }
+
+    def path(fid: str, depth: int = 0) -> str:
+        name, parent = rows[fid]
+        if parent in rows and depth < 32:  # depth guard: a corrupt parent chain can loop
+            return f"{path(parent, depth + 1)} / {name}"
+        return name
+
+    return {fid: path(fid) for fid in rows}
+
+
+def all_notes(con: sqlite3.Connection) -> list[NoteRow]:
+    paths = folder_paths(con)
+    rows = con.execute(
+        "SELECT id, title, folder_id, created_at, modified_at, page_count FROM notes"
+    )
+    return [NoteRow(i, t, paths.get(f or ""), c, m, n) for i, t, f, c, m, n in rows]
+
+
+def get_note(con: sqlite3.Connection, note_id: str) -> NoteRow | None:
+    return next((n for n in all_notes(con) if n.id == note_id), None)
+
+
+def note_pages(con: sqlite3.Connection, note_id: str) -> list[PageText]:
+    rows = con.execute(
+        "SELECT page, source, text, confidence FROM page_text"
+        " WHERE note_id = ? ORDER BY page, source",
+        (note_id,),
+    )
+    return [PageText(p, s, t, c) for p, s, t, c in rows]
+
+
+def note_bundle(con: sqlite3.Connection, note_id: str) -> bytes | None:
+    row = con.execute("SELECT bundle FROM notes WHERE id = ?", (note_id,)).fetchone()
+    return row[0] if row else None
