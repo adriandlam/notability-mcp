@@ -24,11 +24,18 @@ def test_fuzzy_search_tolerates_ocr_misspellings(con):
     index(con, "n1", "Cauchy-Riemann equations", "V homeria conjogate ot u in D")
     index(con, "n2", "eggs, milk, bread")
 
-    hits, more = store.search(con, "harmonic conjugate")
+    hits, more = store.search(con, "conjugate")
 
     assert [(h.note_id, h.page) for h in hits] == [("n1", 2)]
     assert "«" in hits[0].snippet
     assert not more
+
+
+def test_pages_that_only_share_letters_are_not_matches(con):
+    # real Vision output on a page that has nothing to do with Cauchy-Riemann
+    index(con, "n1", "duch matter")
+
+    assert store.search(con, "cauchy riemann") == ([], False)
 
 
 def test_titles_are_searchable_and_follow_renames(con):

@@ -32,6 +32,7 @@ READ_ONLY = ToolAnnotations(
 )
 READ_NOTE_MAX_CHARS = 25_000  # Claude Code warns above ~10k tokens per tool result
 LOW_CONFIDENCE = 0.6
+CLOSE_MATCH = 0.8  # search score from which a hit is worth trusting without a warning
 
 
 @dataclass
@@ -90,7 +91,7 @@ class SearchHit(BaseModel):
     page: int | None = Field(description="1-based page; null for typed text of the whole note")
     source: store.Source
     snippet: str = Field(description="Matching text; matched letters are marked «like this»")
-    score: float
+    score: float = Field(description="Match quality 0..1; 0.8 and above is a close match")
 
 
 class SearchResult(BaseModel):
@@ -106,8 +107,8 @@ def search_notes(
         Field(
             min_length=1,
             max_length=200,
-            description="Plain words, e.g. 'harmonic conjugate'. Matching is fuzzy (3-letter "
-            "pieces) to cope with OCR errors, so no quotes or operators are needed.",
+            description="Plain words, e.g. 'harmonic conjugate'. Each word is matched fuzzily "
+            "to cope with OCR errors; no quotes or operators. Few distinctive words work best.",
         ),
     ],
     ctx: Context[App, Any],
@@ -145,6 +146,12 @@ def search_notes(
         result.notice = (
             "No matches. Try other or fewer words, or browse with notability_list_notes; "
             "pages with only drawings or math may have little OCR text."
+        )
+    elif offset == 0 and hits[0].score < CLOSE_MATCH:
+        result.notice = (
+            "No close matches; these pages only loosely resemble the query, often because OCR "
+            "garbled the handwriting. Check snippets or page images before relying on them, "
+            "or search for a single distinctive word."
         )
     return result
 

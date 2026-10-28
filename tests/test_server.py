@@ -64,7 +64,7 @@ async def test_every_tool_is_annotated_read_only(index):
 @pytest.mark.anyio
 async def test_search_read_and_view_a_page(index):
     async with Client(mcp, raise_exceptions=True) as client:
-        found = await client.call_tool("notability_search_notes", {"query": "harmonic conjugate"})
+        found = await client.call_tool("notability_search_notes", {"query": "conjugate"})
         note = await client.call_tool("notability_read_note", {"note_id": "n1"})
         image = await client.call_tool(
             "notability_get_page_image", {"note_id": "n1", "page": 1, "max_edge": 512}
@@ -72,10 +72,21 @@ async def test_search_read_and_view_a_page(index):
 
     hit = found.structured_content["hits"][0]
     assert (hit["note_id"], hit["page"], hit["folder"]) == ("n1", 2, "MATH 300")
+    assert found.structured_content["notice"] is None
     assert "## Page 1\nCauchy-Riemann equations" in text(note)
     assert "## Page 2 (low OCR confidence" in text(note)
     [block] = image.content
     assert isinstance(block, ImageContent) and block.mime_type == "image/png"
+
+
+@pytest.mark.anyio
+async def test_loose_matches_come_with_a_warning(index):
+    async with Client(mcp, raise_exceptions=True) as client:
+        found = await client.call_tool("notability_search_notes", {"query": "riemann equality"})
+
+    [hit] = found.structured_content["hits"]
+    assert hit["page"] == 1 and hit["score"] < 0.8
+    assert "No close matches" in found.structured_content["notice"]
 
 
 @pytest.mark.anyio

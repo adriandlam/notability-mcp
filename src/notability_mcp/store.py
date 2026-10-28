@@ -7,6 +7,7 @@ import sys
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from difflib import SequenceMatcher, get_close_matches
 from pathlib import Path
 from typing import Literal
 
@@ -152,27 +153,57 @@ class QueryError(ValueError):
     pass
 
 
-def fuzzy_query(text: str) -> str:
-    """FTS5 query matching any 3-letter piece of any query word, for noisy OCR text."""
+WEAK_MATCH = 0.6  # pages scoring below this only share letters with the query
+CANDIDATES = 300  # pages pre-ranked by FTS that the word-level scoring looks at
+
+
+def _words(text: str) -> list[str]:
     words = [w for w in re.findall(r"\w+", text.lower()) if len(w) >= 3]
     if not words:
         raise QueryError("Search needs at least one word of 3 or more letters.")
+    return words
+
+
+def fuzzy_query(text: str) -> str:
+    """FTS5 query matching any 3-letter piece of any query word, for noisy OCR text."""
+    words = _words(text)
     grams = dict.fromkeys(w[i : i + 3] for w in words for i in range(len(w) - 2))
     return " OR ".join(f'"{g}"' for g in grams)
+
+
+def match_score(words: list[str], text: str) -> float:
+    """How closely the text contains the query words, 0..1.
+
+    Each query word is compared with its most similar word in the text, so OCR misspellings
+    still score well; the result is the mean similarity weighted by word length.
+    """
+    vocabulary = set(re.findall(r"\w+", text.lower()))
+    total = 0.0
+    for word in words:
+        if close := get_close_matches(word, vocabulary, n=1, cutoff=0.5):
+            total += len(word) * SequenceMatcher(None, word, close[0]).ratio()
+    return total / sum(map(len, words))
 
 
 def search(
     con: sqlite3.Connection, query: str, *, limit: int = 10, offset: int = 0
 ) -> tuple[list[Hit], bool]:
-    """Best-matching pages and whether more results exist past this page."""
+    """Best-matching pages and whether more results exist past this page.
+
+    FTS5 finds pages sharing 3-letter pieces with the query, which is nearly every page; those
+    are re-ranked by match_score and pages below WEAK_MATCH are dropped.
+    """
+    words = _words(query)
     rows = con.execute(
-        "SELECT note_id, title, page, source,"
-        " snippet(page_text, 1, '«', '»', '…', 48), bm25(page_text, 2.0, 1.0) AS score"
-        " FROM page_text WHERE page_text MATCH ? ORDER BY score LIMIT ? OFFSET ?",
-        (fuzzy_query(query), limit + 1, offset),
+        "SELECT note_id, title, page, source, text, snippet(page_text, 1, '«', '»', '…', 48)"
+        " FROM page_text WHERE page_text MATCH ? ORDER BY bm25(page_text, 2.0, 1.0) LIMIT ?",
+        (fuzzy_query(query), CANDIDATES),
     ).fetchall()
-    hits = [Hit(n, t, p, s, snip, -score) for n, t, p, s, snip, score in rows[:limit]]
-    return hits, len(rows) > limit
+    scored = [
+        Hit(n, t, p, s, snip, match_score(words, f"{t}\n{text}")) for n, t, p, s, text, snip in rows
+    ]
+    hits = sorted((h for h in scored if h.score >= WEAK_MATCH), key=lambda h: -h.score)
+    return hits[offset : offset + limit], len(hits) > offset + limit
 
 
 @dataclass
