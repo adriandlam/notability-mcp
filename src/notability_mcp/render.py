@@ -4,7 +4,7 @@ import io
 import math
 from collections.abc import Callable, Iterator
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageChops, ImageDraw
 
 from notability_mcp import pdf
 from notability_mcp.bundle import HIGHLIGHTER, Ink, Page, decode_path
@@ -18,7 +18,7 @@ _SUPERSAMPLE = 2  # draw at 2x, then downscale: cheap antialiasing
 def render_page(page: Page, max_edge: int = MAX_EDGE, background: bytes | None = None) -> bytes:
     """PNG of the page's ink, long edge `max_edge` px, over `background` (the page's PDF) or white.
 
-    ponytail: shapes, images and typed text are not drawn yet.
+    Shapes, pasted images and typed text are not drawn.
     """
     k = max_edge / max(page.width, page.height)
     size = (round(page.width * k), round(page.height * k))
@@ -27,23 +27,31 @@ def render_page(page: Page, max_edge: int = MAX_EDGE, background: bytes | None =
     img = Image.new("RGB", canvas, "white")
     if background and page.pdf and (drawn := pdf.render(background, page.pdf.index, canvas)):
         img.paste(drawn)
-    draw = ImageDraw.Draw(img)
-    # highlighters first so pen strokes stay on top
-    for ink in sorted(page.inks, key=lambda i: i.tool != HIGHLIGHTER):
-        color = _color(ink)
-        for line, width in _polylines(ink):
-            pts = [(x * s, y * s) for x, y in line]
-            draw.line(pts, fill=color, width=max(1, round(width * s)), joint="curve")
+    if highlights := [ink for ink in page.inks if ink.tool == HIGHLIGHTER]:
+        # multiplied in, like a real highlighter: the PDF text under it stays legible
+        layer = Image.new("RGB", canvas, "white")
+        _draw(layer, highlights, s)
+        img = ImageChops.multiply(img, layer)
+    _draw(img, [ink for ink in page.inks if ink.tool != HIGHLIGHTER], s)
     img = img.resize(size, Image.Resampling.LANCZOS)
     out = io.BytesIO()
     img.save(out, "PNG", optimize=True)
     return out.getvalue()
 
 
+def _draw(img: Image.Image, inks: list[Ink], s: float) -> None:
+    draw = ImageDraw.Draw(img)
+    for ink in inks:
+        color = _color(ink)
+        for line, width in _polylines(ink):
+            pts = [(x * s, y * s) for x, y in line]
+            draw.line(pts, fill=color, width=max(1, round(width * s)), joint="curve")
+
+
 def _color(ink: Ink) -> tuple[int, int, int]:
-    r, g, b, _ = ink.color
-    if ink.tool == HIGHLIGHTER:  # ponytail: fake 40% translucency by blending with white
-        return (round(r * 0.4 + 153), round(g * 0.4 + 153), round(b * 0.4 + 153))
+    r, g, b, a = ink.color
+    if ink.tool == HIGHLIGHTER:  # its translucency, as the color it gives on white paper
+        return (255 - (255 - r) * a // 255, 255 - (255 - g) * a // 255, 255 - (255 - b) * a // 255)
     return (r, g, b)
 
 

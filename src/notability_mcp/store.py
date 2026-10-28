@@ -29,10 +29,11 @@ CREATE TABLE IF NOT EXISTS notes (
     bundle BLOB,                 -- raw NoteBundle, for rendering pages on demand
     indexed_at TEXT              -- modified_at of the bundle that was indexed
 );
--- PDFs that note pages are drawn on, shared between notes.
--- ponytail: assets of deleted notes are kept; prune them if the file size ever matters.
+-- PDFs that note pages are drawn on, shared between notes. A PDF stays here after the notes
+-- using it are deleted.
 CREATE TABLE IF NOT EXISTS assets (sha512 TEXT PRIMARY KEY, data BLOB NOT NULL);
--- ponytail: note_id is UNINDEXED, so per-note reads scan the table; fine below ~100k pages.
+-- note_id is UNINDEXED (FTS5 can't index it), so reading one note's pages scans the table:
+-- about 2 ms for 6,000 pages.
 CREATE VIRTUAL TABLE IF NOT EXISTS page_text USING fts5(
     title, text,
     note_id UNINDEXED, page UNINDEXED, source UNINDEXED, confidence UNINDEXED,

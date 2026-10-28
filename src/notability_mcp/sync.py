@@ -17,10 +17,7 @@ def _iso(ms: float | None) -> str | None:
 
 
 def parse_library(library: dict) -> tuple[list[Folder], list[NoteMeta]]:
-    """Folders and notes of the user's private space.
-
-    ponytail: notes shared with the user (sharedNotes) are skipped; add them when needed.
-    """
+    """Folders and notes of the user's private space; notes shared by others are skipped."""
     space = library.get("privateSpace") or {}
     # `organizers` is the legacy view of the same rows; `folders` wins where they disagree
     rows = {r["id"]: r for r in space.get("organizers", []) + space.get("folders", [])}
