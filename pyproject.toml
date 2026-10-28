@@ -9,6 +9,7 @@ authors = [{ name = "Adrian Lam", email = "me@adrianlam.sh" }]
 requires-python = ">=3.12"
 keywords = ["mcp", "notability", "handwriting", "ocr"]
 classifiers = [
+    "Development Status :: 3 - Alpha",
     "Operating System :: MacOS",
     "Operating System :: Microsoft :: Windows",
     "Operating System :: POSIX :: Linux",

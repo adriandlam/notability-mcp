@@ -1,0 +1,21 @@
+name: release
+
+# Publishing a GitHub release (e.g. `gh release create v0.1.0 --generate-notes`) uploads that
+# version to PyPI.
+on:
+  release:
+    types: [published]
+
+jobs:
+  pypi:
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write # PyPI trusted publishing: no API token is stored anywhere
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+      - name: Tag matches the version in pyproject.toml
+        run: test "${GITHUB_REF_NAME#v}" = "$(uv version --short)"
+      - run: uv build
+      - run: uv publish
