@@ -159,6 +159,7 @@ The index is stored in `~/Library/Application Support/notability-mcp` on macOS,
   page image before trusting anything exact.
 - Page images show ink and PDF pages. Shapes, pasted images and typed text aren't drawn yet.
 - Notes other people shared with you aren't synced.
+- Audio recordings aren't transcribed or searched.
 - On Linux without a keyring (a headless server, say), `login` can't save the token. Set
   `NOTABILITY_TOKEN` instead.
 
