@@ -29,10 +29,18 @@ network requests; `sync` is the only command that talks to Notability.
 
 ## Setup
 
-### 1. Log in
+### 1. Install
 
 ```sh
-uvx notability-mcp login
+uv tool install git+https://github.com/adriandlam/notability-mcp
+```
+
+This puts `notability-mcp` on your `PATH`. To update it later, run `uv tool upgrade notability-mcp`.
+
+### 2. Log in
+
+```sh
+notability-mcp login
 ```
 
 You'll be asked for your `nb-auth-token`, the cookie Notability's web app signs you in with. To
@@ -43,10 +51,10 @@ developer tools, go to Application (Chrome, Edge) or Storage (Firefox, Safari), 
 The token is saved in your system keychain: Keychain on macOS, Credential Manager on Windows,
 Secret Service on Linux.
 
-### 2. Sync
+### 3. Sync
 
 ```sh
-uvx notability-mcp sync
+notability-mcp sync
 ```
 
 The first sync downloads every note and its PDFs and runs OCR on each handwritten page. For
@@ -54,7 +62,7 @@ The first sync downloads every note and its PDFs and runs OCR on each handwritte
 is slower. Later syncs only fetch notes that changed. Run it again whenever you want new notes to show up, or
 schedule it with cron, launchd or Task Scheduler.
 
-### 3. Connect your client
+### 4. Connect your client
 
 Most clients take this config:
 
@@ -62,18 +70,21 @@ Most clients take this config:
 {
   "mcpServers": {
     "notability": {
-      "command": "uvx",
-      "args": ["notability-mcp", "serve"]
+      "command": "notability-mcp",
+      "args": ["serve"]
     }
   }
 }
 ```
 
+If your client can't find `notability-mcp`, use its full path, from `which notability-mcp` (or
+`where notability-mcp` on Windows).
+
 <details>
 <summary>Claude Code</summary>
 
 ```sh
-claude mcp add notability -s user -- uvx notability-mcp serve
+claude mcp add notability -s user -- notability-mcp serve
 ```
 
 </details>
@@ -82,10 +93,10 @@ claude mcp add notability -s user -- uvx notability-mcp serve
 <summary>Claude Desktop</summary>
 
 ```sh
-uvx notability-mcp setup
+notability-mcp setup
 ```
 
-This adds the server to `claude_desktop_config.json` using the full path to `uvx`, since Claude
+This adds the server to `claude_desktop_config.json` using the full path to `notability-mcp`, since Claude
 Desktop doesn't see your shell's `PATH`. Restart Claude Desktop afterwards. To edit the file
 yourself, open Settings > Developer > Edit Config.
 
@@ -94,7 +105,7 @@ yourself, open Settings > Developer > Edit Config.
 <details>
 <summary>Cursor</summary>
 
-[Install in Cursor](https://cursor.com/en/install-mcp?name=notability&config=eyJjb21tYW5kIjoidXZ4IiwiYXJncyI6WyJub3RhYmlsaXR5LW1jcCIsInNlcnZlIl19),
+[Install in Cursor](https://cursor.com/en/install-mcp?name=notability&config=eyJjb21tYW5kIjoibm90YWJpbGl0eS1tY3AiLCJhcmdzIjpbInNlcnZlIl19),
 or add the config above to `~/.cursor/mcp.json`.
 
 </details>
@@ -102,11 +113,11 @@ or add the config above to `~/.cursor/mcp.json`.
 <details>
 <summary>VS Code</summary>
 
-[Install in VS Code](https://insiders.vscode.dev/redirect?url=vscode%3Amcp%2Finstall%3F%257B%2522name%2522%253A%2522notability%2522%252C%2522command%2522%253A%2522uvx%2522%252C%2522args%2522%253A%255B%2522notability-mcp%2522%252C%2522serve%2522%255D%257D),
+[Install in VS Code](https://insiders.vscode.dev/redirect?url=vscode%3Amcp%2Finstall%3F%257B%2522name%2522%253A%2522notability%2522%252C%2522command%2522%253A%2522notability-mcp%2522%252C%2522args%2522%253A%255B%2522serve%2522%255D%257D),
 or run:
 
 ```sh
-code --add-mcp '{"name":"notability","command":"uvx","args":["notability-mcp","serve"]}'
+code --add-mcp '{"name":"notability","command":"notability-mcp","args":["serve"]}'
 ```
 
 </details>
@@ -115,7 +126,7 @@ code --add-mcp '{"name":"notability","command":"uvx","args":["notability-mcp","s
 <summary>Codex</summary>
 
 ```sh
-codex mcp add notability -- uvx notability-mcp serve
+codex mcp add notability -- notability-mcp serve
 ```
 
 </details>
@@ -125,9 +136,6 @@ Then ask something like:
 - What did I write about struct allocation in CPSC 213?
 - Summarize my MATH 300 notes from last week.
 - Find the page where I worked out the harmonic conjugate and check my steps.
-
-If you'd rather type `notability-mcp` than `uvx notability-mcp`, install it once with
-`uv tool install notability-mcp`.
 
 ## Tools
 
@@ -163,16 +171,12 @@ The index is stored in `~/Library/Application Support/notability-mcp` on macOS,
 - On Linux without a keyring (a headless server, say), `login` can't save the token. Set
   `NOTABILITY_TOKEN` instead.
 
-## Development
+## Contributing
 
-```sh
-make install   # create .venv and install dependencies
-make hooks     # pre-commit (ruff) and commit-msg (Conventional Commits) hooks
-make check     # lint, typecheck, tests
-make inspect   # open the server in MCP Inspector
-```
-
-Commits follow [Conventional Commits](https://www.conventionalcommits.org).
+See [CONTRIBUTING.md](https://github.com/adriandlam/notability-mcp/blob/main/CONTRIBUTING.md).
+To report a security problem, follow
+[SECURITY.md](https://github.com/adriandlam/notability-mcp/blob/main/SECURITY.md) instead of
+opening an issue.
 
 ## Credits
 
