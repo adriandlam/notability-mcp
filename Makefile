@@ -23,4 +23,4 @@ test:
 check: lint typecheck test
 
 inspect:
-	npx @modelcontextprotocol/inspector uv run notability-mcp serve
+	npx @modelcontextprotocol/inspector -e NOTABILITY_MCP_DB=$(NOTABILITY_MCP_DB) uv run notability-mcp serve
