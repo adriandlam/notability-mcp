@@ -5,7 +5,6 @@ import getpass
 import json
 import logging
 import os
-import shutil
 import sys
 from pathlib import Path
 
@@ -37,11 +36,6 @@ def claude_desktop_config() -> Path:
 
 def server_command() -> list[str]:
     """How a desktop app, which doesn't see the shell's PATH, should start the server."""
-    uvx = shutil.which("uvx")
-    # a relative hit means the current folder (Windows searches it first); anyone could have
-    # put a uvx there, and the config would run it every time Claude Desktop starts
-    if uvx and os.path.isabs(uvx):
-        return [uvx, "notability-mcp", "serve"]
     return [str(Path(sys.argv[0]).resolve()), "serve"]
 
 
