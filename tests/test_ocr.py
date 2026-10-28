@@ -1,11 +1,8 @@
 import io
 
-import pytest
 from PIL import Image, ImageDraw, ImageFont
 
 from notability_mcp import ocr
-
-pytestmark = pytest.mark.skipif(not ocr.available(), reason="Apple Vision is macOS-only")
 
 
 def _png_with(lines: list[str]) -> bytes:

@@ -3,7 +3,6 @@
 # pyobjc creates framework attributes at runtime, so pyright cannot see them.
 # pyright: reportAttributeAccessIssue=false
 
-import sys
 from dataclasses import dataclass
 
 
@@ -12,10 +11,6 @@ class Line:
     text: str
     confidence: float  # 0..1; Vision reports coarse steps (0.3, 0.5, 1.0)
     box: tuple[float, float, float, float]  # x, y, width, height; normalized, top-left origin
-
-
-def available() -> bool:
-    return sys.platform == "darwin"
 
 
 def recognize(png: bytes) -> list[Line]:

@@ -16,11 +16,10 @@ def page_texts(note: Note, pdfs: dict[str, bytes] | None = None) -> list[PageTex
     """Typed text (page 0), one handwriting row per page (empty when there is no ink), and the
     text of each page's PDF, given the note's PDFs by SHA-512."""
     texts = [PageText(0, "typed", note.text)] if note.text else []
-    can_ocr = ocr.available()
     pdf_pages = {sha: pdf.page_texts(data) for sha, data in (pdfs or {}).items()}
     for page in note.pages:
         # the ink alone, without the PDF, so OCR reads only the handwriting
-        lines = ocr.recognize(render_page(page, OCR_MAX_EDGE)) if page.inks and can_ocr else []
+        lines = ocr.recognize(render_page(page, OCR_MAX_EDGE)) if page.inks else []
         confidence = fmean(line.confidence for line in lines) if lines else None
         texts.append(
             PageText(page.number, "handwriting", "\n".join(line.text for line in lines), confidence)
@@ -35,13 +34,12 @@ def index_note(
     con: sqlite3.Connection, note_id: str, bundle: bytes, fetch_asset: Callable[[str], bytes]
 ) -> int:
     """Decode, OCR and store one note, downloading PDFs not stored yet; returns its page count."""
-    note = decode_bundle(bundle) if bundle else Note(note_id, None, [], "", set())
+    note = decode_bundle(bundle) if bundle else Note(note_id, None, [], "")
     pdfs = {}
-    if pdf.available():
-        for sha in {page.pdf.asset for page in note.pages if page.pdf}:
-            if (data := store.asset(con, sha)) is None:
-                data = fetch_asset(sha)
-                store.save_asset(con, sha, data)
-            pdfs[sha] = data
+    for sha in {page.pdf.asset for page in note.pages if page.pdf}:
+        if (data := store.asset(con, sha)) is None:
+            data = fetch_asset(sha)
+            store.save_asset(con, sha, data)
+        pdfs[sha] = data
     store.save_note(con, note_id, bundle, len(note.pages), page_texts(note, pdfs))
     return len(note.pages)

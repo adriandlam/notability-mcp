@@ -1,7 +1,6 @@
 import io
 from pathlib import Path
 
-import pytest
 from PIL import Image, ImageOps
 
 from notability_mcp import pdf
@@ -10,15 +9,13 @@ from notability_mcp.index import page_texts
 from notability_mcp.render import render_page
 from notability_mcp.store import PageText
 
-pytestmark = pytest.mark.skipif(not pdf.available(), reason="PDFKit is macOS-only")
-
 HELLO = (Path(__file__).parent / "fixtures" / "hello.pdf").read_bytes()  # "Hello PDF", 612x792
 SHA = "ab" * 64
 
 
 def pdf_note() -> Note:
     page = Page(1, (0, 0, 0), 612, 792, pdf=PdfPage(SHA, 0))
-    return Note("n1", "Slides", [page], "", {SHA})
+    return Note("n1", "Slides", [page], "")
 
 
 def test_pdf_text_is_indexed_separately_from_handwriting():

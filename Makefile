@@ -1,4 +1,4 @@
-.PHONY: install hooks fmt lint typecheck test check codegen inspect
+.PHONY: install hooks fmt lint typecheck test check inspect
 
 install:
 	uv sync
@@ -21,12 +21,6 @@ test:
 	uv run pytest
 
 check: lint typecheck test
-
-# Regenerate FlatBuffers accessors after editing schema/notability-ops.fbs.
-codegen:
-	rm -rf src/notability_mcp/_generated
-	flatc --python --gen-onefile -o src/notability_mcp/_generated schema/notability-ops.fbs
-	touch src/notability_mcp/_generated/__init__.py
 
 inspect:
 	npx @modelcontextprotocol/inspector uv run notability-mcp serve

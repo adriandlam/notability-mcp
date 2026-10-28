@@ -1,15 +1,12 @@
 """The MCP server: read-only tools over the local note index."""
 
 import sqlite3
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
-from dataclasses import dataclass
 from datetime import UTC, datetime
-from pathlib import Path
-from typing import Annotated, Any, Literal
+from functools import cache
+from typing import Annotated, Literal
 
 from mcp.server import MCPServer
-from mcp.server.mcpserver import Context, Image
+from mcp.server.mcpserver import Image
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
 from pydantic import BaseModel, Field
@@ -35,36 +32,16 @@ LOW_CONFIDENCE = 0.6
 CLOSE_MATCH = 0.8  # search score from which a hit is worth trusting without a warning
 
 
-@dataclass
-class App:
-    path: Path
-    con: sqlite3.Connection | None = None
-
-    def db(self) -> sqlite3.Connection:
-        if self.con is None:
-            if not self.path.exists():
-                raise ToolError(
-                    f"No note index at {self.path}. Ask the user to run `notability-mcp sync`."
-                )
-            self.con = store.connect(self.path, readonly=True)
-        return self.con
+mcp = MCPServer("notability", instructions=INSTRUCTIONS)
 
 
-@asynccontextmanager
-async def lifespan(server: MCPServer) -> AsyncIterator[App]:
-    app = App(store.default_path())
-    try:
-        yield app
-    finally:
-        if app.con is not None:
-            app.con.close()
-
-
-mcp = MCPServer("notability", instructions=INSTRUCTIONS, lifespan=lifespan)
-
-
-def _db(ctx: Context[App, Any]) -> sqlite3.Connection:
-    return ctx.request_context.lifespan_context.db()
+@cache
+def _db() -> sqlite3.Connection:
+    """The index, opened read-only on first use and kept open for the life of the process."""
+    path = store.default_path()
+    if not path.exists():
+        raise ToolError(f"No note index at {path}. Ask the user to run `notability-mcp sync`.")
+    return store.connect(path, readonly=True)
 
 
 def _note(con: sqlite3.Connection, note_id: str) -> store.NoteRow:
@@ -111,7 +88,6 @@ def search_notes(
             "to cope with OCR errors; no quotes or operators. Few distinctive words work best.",
         ),
     ],
-    ctx: Context[App, Any],
     limit: Annotated[int, Field(ge=1, le=50)] = 10,
     cursor: Annotated[str | None, Field(description="next_cursor of a previous call")] = None,
 ) -> SearchResult:
@@ -121,12 +97,12 @@ def search_notes(
     it with notability_read_note or notability_get_page_image. To browse by folder or date,
     use notability_list_notes instead.
     """
-    con, offset = _db(ctx), _offset(cursor)
+    con, offset = _db(), _offset(cursor)
     try:
         hits, more = store.search(con, query, limit=limit, offset=offset)
     except store.QueryError as e:
         raise ToolError(str(e)) from e
-    folders = {n.id: n.folder for n in store.all_notes(con)}
+    folders = {n.note_id: n.folder for n in store.all_notes(con)}
     result = SearchResult(
         hits=[
             SearchHit(
@@ -180,7 +156,6 @@ def _utc(value: str) -> datetime:
 
 @mcp.tool(name="notability_list_notes", title="List notes", annotations=READ_ONLY)
 def list_notes(
-    ctx: Context[App, Any],
     folder: Annotated[
         str | None,
         Field(description="Only notes whose folder path contains this text, e.g. 'MATH 300'"),
@@ -197,7 +172,7 @@ def list_notes(
     Also returns every folder path. Use to browse a folder, see what changed recently, or find a
     note by title; to search inside notes use notability_search_notes.
     """
-    con, offset = _db(ctx), _offset(cursor)
+    con, offset = _db(), _offset(cursor)
     notes = store.all_notes(con)
     if folder:
         notes = [n for n in notes if n.folder and folder.casefold() in n.folder.casefold()]
@@ -213,21 +188,11 @@ def list_notes(
         notes.sort(key=lambda n: n.modified_at, reverse=True)
     page = notes[offset : offset + limit]
     return NoteList(
-        notes=[
-            NoteSummary(
-                note_id=n.id,
-                title=n.title,
-                folder=n.folder,
-                page_count=n.page_count,
-                created_at=n.created_at,
-                modified_at=n.modified_at,
-            )
-            for n in page
-        ],
+        notes=[NoteSummary.model_validate(n, from_attributes=True) for n in page],
         total=len(notes),
         next_cursor=str(offset + limit) if offset + limit < len(notes) else None,
         folders=sorted(set(store.folder_paths(con).values())),
-        synced_at=store.synced_at(con),
+        synced_at=store.get_meta(con, "synced_at"),
     )
 
 
@@ -239,7 +204,6 @@ def list_notes(
 )
 def read_note(
     note_id: str,
-    ctx: Context[App, Any],
     start_page: Annotated[int, Field(ge=1)] = 1,
     end_page: Annotated[int | None, Field(ge=1, description="Inclusive; default: last")] = None,
 ) -> str:
@@ -249,7 +213,7 @@ def read_note(
     OCR is approximate; pages where it looks unreliable are flagged, so view those with
     notability_get_page_image. Output stops near 25,000 characters and says how to continue.
     """
-    con = _db(ctx)
+    con = _db()
     note = _note(con, note_id)
     if note.page_count is None:
         raise ToolError("This note's content isn't synced yet. Ask the user to run sync.")
@@ -289,7 +253,6 @@ def read_note(
 def get_page_image(
     note_id: str,
     page: Annotated[int, Field(ge=1)],
-    ctx: Context[App, Any],
     max_edge: Annotated[int, Field(ge=256, le=2576, description="Long edge in pixels")] = MAX_EDGE,
 ) -> Image:
     """One note page as a PNG, to read handwriting, math and drawings exactly as written.
@@ -297,7 +260,7 @@ def get_page_image(
     Prefer this over OCR text whenever accuracy matters. Draws the ink over the page's PDF, if
     any; shapes, pasted images and typed text are not shown.
     """
-    con = _db(ctx)
+    con = _db()
     note = _note(con, note_id)
     bundle = store.note_bundle(con, note_id)
     if not bundle:

@@ -25,12 +25,7 @@ def render_page(page: Page, max_edge: int = MAX_EDGE, background: bytes | None =
     s = k * _SUPERSAMPLE
     canvas = (size[0] * _SUPERSAMPLE, size[1] * _SUPERSAMPLE)
     img = Image.new("RGB", canvas, "white")
-    if (
-        background
-        and page.pdf
-        and pdf.available()
-        and (drawn := pdf.render(background, page.pdf.index, canvas))
-    ):
+    if background and page.pdf and (drawn := pdf.render(background, page.pdf.index, canvas)):
         img.paste(drawn)
     draw = ImageDraw.Draw(img)
     # highlighters first so pen strokes stay on top

@@ -33,14 +33,12 @@ dev = ["anyio>=4", "pyright>=1.1.400", "pytest>=9", "ruff>=0.16"]
 
 [tool.ruff]
 line-length = 100
-extend-exclude = ["src/notability_mcp/_generated"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
 
 [tool.pyright]
 include = ["src", "tests"]
-exclude = ["src/notability_mcp/_generated"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

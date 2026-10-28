@@ -3,7 +3,6 @@
 import os
 import re
 import sqlite3
-import sys
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -41,7 +40,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS page_text USING fts5(
 """
 
 
-type Source = Literal["handwriting", "typed", "pdf", "audio"]
+type Source = Literal["handwriting", "typed", "pdf"]
 
 
 @dataclass
@@ -82,11 +81,7 @@ class Hit:
 def default_path() -> Path:
     if env := os.environ.get("NOTABILITY_MCP_DB"):
         return Path(env)
-    if sys.platform == "darwin":
-        base = Path.home() / "Library" / "Application Support"
-    else:
-        base = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share")
-    return base / "notability-mcp" / "index.db"
+    return Path.home() / "Library" / "Application Support" / "notability-mcp" / "index.db"
 
 
 def connect(path: Path, *, readonly: bool = False) -> sqlite3.Connection:
@@ -220,7 +215,7 @@ def search(
 
 @dataclass
 class NoteRow:
-    id: str
+    note_id: str
     title: str
     folder: str | None  # folder path, e.g. "Fall 2026 / MATH 300"
     created_at: str | None
@@ -231,10 +226,6 @@ class NoteRow:
 def get_meta(con: sqlite3.Connection, key: str) -> str | None:
     row = con.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
     return row[0] if row else None
-
-
-def synced_at(con: sqlite3.Connection) -> str | None:
-    return get_meta(con, "synced_at")
 
 
 def device_id(con: sqlite3.Connection) -> str:
@@ -271,7 +262,7 @@ def all_notes(con: sqlite3.Connection) -> list[NoteRow]:
 
 
 def get_note(con: sqlite3.Connection, note_id: str) -> NoteRow | None:
-    return next((n for n in all_notes(con) if n.id == note_id), None)
+    return next((n for n in all_notes(con) if n.note_id == note_id), None)
 
 
 def note_pages(con: sqlite3.Connection, note_id: str) -> list[PageText]:
@@ -289,12 +280,7 @@ def note_bundle(con: sqlite3.Connection, note_id: str) -> bytes | None:
 
 
 def asset(con: sqlite3.Connection, sha512: str) -> bytes | None:
-    try:
-        row = con.execute("SELECT data FROM assets WHERE sha512 = ?", (sha512,)).fetchone()
-    except sqlite3.OperationalError as e:  # an index synced before PDFs were stored
-        if "no such table" in str(e):
-            return None
-        raise
+    row = con.execute("SELECT data FROM assets WHERE sha512 = ?", (sha512,)).fetchone()
     return row[0] if row else None
 
 

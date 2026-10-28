@@ -4,13 +4,8 @@
 # pyright: reportAttributeAccessIssue=false
 
 import io
-import sys
 
 from PIL import Image
-
-
-def available() -> bool:
-    return sys.platform == "darwin"
 
 
 def _open(data: bytes):

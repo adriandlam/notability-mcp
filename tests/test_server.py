@@ -4,7 +4,7 @@ import pytest
 from mcp import Client
 from mcp.types import ImageContent
 
-from notability_mcp import store
+from notability_mcp import server, store
 from notability_mcp.server import mcp
 from notability_mcp.store import Folder, NoteMeta, PageText
 
@@ -20,6 +20,15 @@ TOOLS = {
 @pytest.fixture
 def anyio_backend():
     return "asyncio"
+
+
+@pytest.fixture(autouse=True)
+def fresh_connection():
+    """The server keeps its index open for the life of the process; each test has its own."""
+    yield
+    if server._db.cache_info().currsize:
+        server._db().close()
+    server._db.cache_clear()
 
 
 @pytest.fixture

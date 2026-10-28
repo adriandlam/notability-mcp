@@ -5,12 +5,11 @@ from notability_mcp.bundle import Note, decode_bundle, linearize
 FIXTURES = Path(__file__).parent / "fixtures"
 
 
-def test_typed_text_and_assets_from_bundle():
+def test_typed_text_from_bundle():
     note = decode_bundle((FIXTURES / "synthetic_bundle.bin").read_bytes())
 
     # body text (with an edit and a removed char), then a separate text box
     assert note.text == "Hello world!\n\nbox"
-    assert len(note.assets) == 1
 
 
 def test_streamed_ink_lands_on_the_implicit_first_page(ink_note: Note):

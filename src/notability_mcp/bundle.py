@@ -19,7 +19,6 @@ class _Op(IntEnum):
     """PayloadUnion tags (member index + 1) for the ops this module reads."""
 
     SET_METADATA = 1
-    ASSET_CLOUD_PERSISTED = 2
     CREATE_PAGE = 3
     MODIFY_PAGE = 4
     INSERT_CHAR = 7
@@ -160,7 +159,6 @@ class Note:
     title: str | None
     pages: list[Page]
     text: str  # typed text, one block per text field
-    assets: set[str]
 
 
 def read_ops(buf: bytes, ops_field: int) -> list[tuple[Id, int, _Table]]:
@@ -225,7 +223,6 @@ def build_note(note_id: str, ops: list[tuple[Id, int, _Table]]) -> Note:
     deleted: dict[Id | SeqId, bool] = {}
     chars: dict[Id | None, list[tuple[SeqId, SeqId | None, str]]] = defaultdict(list)
     removed: set[SeqId] = set()
-    assets: set[str] = set()
 
     for (site, ts), kind, p in ops:
         match kind:
@@ -234,9 +231,6 @@ def build_note(note_id: str, ops: list[tuple[Id, int, _Table]]) -> Note:
                     title = s
                 if (t := p.table(1)) and (bg := t.table(0)):
                     note_bg = _background(bg)
-            case _Op.ASSET_CLOUD_PERSISTED:
-                if digest := p.digest(0):
-                    assets.add(digest)
             case _Op.CREATE_PAGE:
                 prev, bg = p.seq(0), _background(p.table(1))
                 for i in range(min(p.scalar(2, "<I", 0), _MAX_PAGES_PER_OP) or 1):
@@ -332,7 +326,7 @@ def build_note(note_id: str, ops: list[tuple[Id, int, _Table]]) -> Note:
         seq = linearize([(node, anchor) for node, anchor, _ in runs])
         if text := "".join(glyph[n] for n in seq if n not in removed).strip():
             blocks.append(text)
-    return Note(id=note_id, title=title, pages=pages, text="\n\n".join(blocks), assets=assets)
+    return Note(id=note_id, title=title, pages=pages, text="\n\n".join(blocks))
 
 
 type PathElement = tuple[int, list[tuple[float, float]], float | None]  # (kind, points, width)
