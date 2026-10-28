@@ -3,6 +3,7 @@
 import os
 import re
 import sqlite3
+import sys
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -81,7 +82,13 @@ class Hit:
 def default_path() -> Path:
     if env := os.environ.get("NOTABILITY_MCP_DB"):
         return Path(env)
-    return Path.home() / "Library" / "Application Support" / "notability-mcp" / "index.db"
+    if sys.platform == "darwin":
+        base = Path.home() / "Library" / "Application Support"
+    elif sys.platform == "win32":
+        base = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
+    else:
+        base = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share")
+    return base / "notability-mcp" / "index.db"
 
 
 def connect(path: Path, *, readonly: bool = False) -> sqlite3.Connection:

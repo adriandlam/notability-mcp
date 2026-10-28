@@ -7,10 +7,11 @@ on:
 
 jobs:
   check:
-    # macOS: handwriting OCR uses Apple's Vision framework.
-    runs-on: macos-latest
+    # each OS runs a different OCR engine: Vision on macOS, RapidOCR elsewhere
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
         python: ["3.12", "3.14"]
     steps:
       - uses: actions/checkout@v7
@@ -18,4 +19,7 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - run: uv sync --locked
-      - run: make check
+      - run: uv run ruff format --check .
+      - run: uv run ruff check .
+      - run: uv run pyright
+      - run: uv run pytest

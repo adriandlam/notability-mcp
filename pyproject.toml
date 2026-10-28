@@ -10,6 +10,8 @@ requires-python = ">=3.12"
 keywords = ["mcp", "notability", "handwriting", "ocr"]
 classifiers = [
     "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
     "Topic :: Text Processing :: Indexing",
 ]
@@ -17,9 +19,17 @@ dependencies = [
     "keyring>=25.7.0",
     "mcp>=2.3,<3",
     "pillow>=12",
-    "pyobjc-framework-vision>=12 ; sys_platform == 'darwin'",
+    "pypdfium2>=5.14",
     "websockets>=17.3",
+    # OCR: Apple's Vision on macOS, RapidOCR (ONNX models bundled in the wheel) elsewhere
+    "pyobjc-framework-vision>=12 ; sys_platform == 'darwin'",
+    "rapidocr>=3.10 ; sys_platform != 'darwin'",
+    "onnxruntime>=1.20 ; sys_platform != 'darwin'",
 ]
+
+[project.urls]
+Repository = "https://github.com/adriandlam/notability-mcp"
+Issues = "https://github.com/adriandlam/notability-mcp/issues"
 
 [project.scripts]
 notability-mcp = "notability_mcp.cli:main"
