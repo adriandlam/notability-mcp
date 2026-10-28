@@ -37,7 +37,10 @@ def claude_desktop_config() -> Path:
 
 def server_command() -> list[str]:
     """How a desktop app, which doesn't see the shell's PATH, should start the server."""
-    if uvx := shutil.which("uvx"):
+    uvx = shutil.which("uvx")
+    # a relative hit means the current folder (Windows searches it first); anyone could have
+    # put a uvx there, and the config would run it every time Claude Desktop starts
+    if uvx and os.path.isabs(uvx):
         return [uvx, "notability-mcp", "serve"]
     return [str(Path(sys.argv[0]).resolve()), "serve"]
 
@@ -53,10 +56,16 @@ def setup() -> None:
         sys.exit(f"{path} isn't valid JSON ({e}). Fix it, then run setup again.")
     command, *args = server_command()
     config.setdefault("mcpServers", {})["notability"] = {"command": command, "args": args}
+    # the config can hold other servers' API keys: keep its permissions (private if it's new),
+    # and write a temp file first so a crash can't leave Claude Desktop with a broken config
+    mode = path.stat().st_mode & 0o777 if path.exists() else 0o600
     tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(config, indent=2) + "\n")
-    tmp.replace(path)  # a crash mid-write must not leave Claude Desktop with a broken config
-    print(f"Added notability to {path}. Restart Claude Desktop to load it.", file=sys.stderr)
+    tmp.unlink(missing_ok=True)
+    with os.fdopen(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, mode), "w") as f:
+        f.write(json.dumps(config, indent=2) + "\n")
+    tmp.replace(path)
+    print(f"Added notability to {path}, running: {' '.join([command, *args])}", file=sys.stderr)
+    print("Restart Claude Desktop to load it.", file=sys.stderr)
 
 
 def main(argv: list[str] | None = None) -> None:
