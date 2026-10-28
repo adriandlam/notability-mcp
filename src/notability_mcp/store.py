@@ -29,6 +29,9 @@ CREATE TABLE IF NOT EXISTS notes (
     bundle BLOB,                 -- raw NoteBundle, for rendering pages on demand
     indexed_at TEXT              -- modified_at of the bundle that was indexed
 );
+-- PDFs that note pages are drawn on, shared between notes.
+-- ponytail: assets of deleted notes are kept; prune them if the file size ever matters.
+CREATE TABLE IF NOT EXISTS assets (sha512 TEXT PRIMARY KEY, data BLOB NOT NULL);
 -- ponytail: note_id is UNINDEXED, so per-note reads scan the table; fine below ~100k pages.
 CREATE VIRTUAL TABLE IF NOT EXISTS page_text USING fts5(
     title, text,
@@ -123,6 +126,15 @@ def save_library(con: sqlite3.Connection, folders: list[Folder], notes: list[Not
             "INSERT OR REPLACE INTO meta VALUES ('synced_at', ?)",
             (datetime.now(UTC).isoformat(timespec="seconds"),),
         )
+
+
+def require_index_version(con: sqlite3.Connection, version: str) -> None:
+    """Mark every note stale if the index was built by a different version of the indexer."""
+    if get_meta(con, "index_version") == version:
+        return
+    with con:
+        con.execute("UPDATE notes SET indexed_at = NULL")
+        con.execute("INSERT OR REPLACE INTO meta VALUES ('index_version', ?)", (version,))
 
 
 def stale_notes(con: sqlite3.Connection) -> list[str]:
@@ -274,3 +286,18 @@ def note_pages(con: sqlite3.Connection, note_id: str) -> list[PageText]:
 def note_bundle(con: sqlite3.Connection, note_id: str) -> bytes | None:
     row = con.execute("SELECT bundle FROM notes WHERE id = ?", (note_id,)).fetchone()
     return row[0] if row else None
+
+
+def asset(con: sqlite3.Connection, sha512: str) -> bytes | None:
+    try:
+        row = con.execute("SELECT data FROM assets WHERE sha512 = ?", (sha512,)).fetchone()
+    except sqlite3.OperationalError as e:  # an index synced before PDFs were stored
+        if "no such table" in str(e):
+            return None
+        raise
+    return row[0] if row else None
+
+
+def save_asset(con: sqlite3.Connection, sha512: str, data: bytes) -> None:
+    with con:
+        con.execute("INSERT OR REPLACE INTO assets VALUES (?, ?)", (sha512, data))

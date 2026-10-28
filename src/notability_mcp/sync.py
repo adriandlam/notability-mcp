@@ -9,6 +9,7 @@ from notability_mcp.index import index_note
 from notability_mcp.store import Folder, NoteMeta
 
 log = logging.getLogger(__name__)
+INDEX_VERSION = "2"  # bump when indexing changes, so the next sync re-indexes every note
 
 
 def _iso(ms: float | None) -> str | None:
@@ -50,13 +51,19 @@ def sync(con: sqlite3.Connection, token: str) -> tuple[int, int]:
     """Refresh metadata, then download and index notes that changed. Returns (indexed, failed)."""
     folders, notes = parse_library(api.fetch_library(token))
     store.save_library(con, folders, notes)
+    store.require_index_version(con, INDEX_VERSION)
     titles = {n.id: n.title for n in notes}
     stale, device = store.stale_notes(con), store.device_id(con)
     log.info("%d notes in library, %d to download and index", len(notes), len(stale))
     failed = 0
     for i, note_id in enumerate(stale, 1):
         try:
-            pages = index_note(con, note_id, api.fetch_bundle(token, note_id, device))
+            pages = index_note(
+                con,
+                note_id,
+                api.fetch_bundle(token, note_id, device),
+                lambda sha, note_id=note_id: api.fetch_asset(token, note_id, sha),
+            )
         except api.AuthError:
             raise
         except Exception:  # one unreadable note must not stop the rest

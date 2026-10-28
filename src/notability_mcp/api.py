@@ -1,4 +1,4 @@
-"""Notability's private web API: the library over Socket.IO, note bundles over HTTP.
+"""Notability's private web API: the library over Socket.IO, note bundles and files over HTTP.
 
 Unofficial and undocumented; mapped by notability-cli (docs/PROTOCOL.md at d49dc45). Requests
 carry the web app's client-* headers, since the server forces updates on old client versions.
@@ -6,6 +6,7 @@ carry the web app's client-* headers, since the server forces updates on old cli
 
 import json
 import os
+import re
 import time
 import urllib.error
 import urllib.request
@@ -58,6 +59,15 @@ def fetch_library(token: str, timeout: float = 60) -> dict:
                     raise ApiError(f"Notability library error: {args}")
 
 
+def _auth(token: str) -> dict[str, str]:
+    return {
+        "Cookie": f"nb-auth-token={token}",
+        "nb-auth-token": token,
+        "User-Agent": USER_AGENT,
+        **CLIENT_HEADERS,
+    }
+
+
 def fetch_bundle(token: str, note_id: str, device_id: str) -> bytes:
     """A note's full op log (FlatBuffers NoteBundle); empty for notes that have no ops yet."""
     uuid.UUID(note_id)  # ids come from the server; never put anything else in the URL
@@ -65,16 +75,27 @@ def fetch_bundle(token: str, note_id: str, device_id: str) -> bytes:
         f"{BASE}/collab-api/note/{note_id}/bundle?deviceId={uuid.UUID(device_id)}",
         data=b"",
         method="POST",
-        headers={
-            "Cookie": f"nb-auth-token={token}",
-            "nb-auth-token": token,
-            "Content-Type": "application/octet-stream",
-            "User-Agent": USER_AGENT,
-            **CLIENT_HEADERS,
-        },
+        headers={**_auth(token), "Content-Type": "application/octet-stream"},
     )
     body = _send(request)
     return b"" if body.startswith(b"No ops found") else body
+
+
+def fetch_asset(token: str, note_id: str, sha512: str) -> bytes:
+    """A file a note uses (PDF, image, audio), by SHA-512, via a short-lived signed URL."""
+    uuid.UUID(note_id)
+    if not re.fullmatch(r"[0-9a-f]{128}", sha512):
+        raise ValueError(f"Not a SHA-512 hex digest: {sha512[:20]!r}")
+    signed = _send(
+        urllib.request.Request(f"{BASE}/media/{sha512}?noteId={note_id}", headers=_auth(token))
+    )
+    url = json.loads(signed) if signed.startswith(b'"') else signed.decode().strip()
+    if not url.startswith("https://"):
+        raise ApiError("Notability returned an unexpected download link for a PDF.")
+    try:  # the signed URL is the credential; the token must not go to the storage host
+        return _send(urllib.request.Request(url, headers={"User-Agent": USER_AGENT}))
+    except AuthError as e:  # a refused link is this file's problem, not a bad token
+        raise ApiError("Storage refused the download link for a PDF.") from e
 
 
 def _send(request: urllib.request.Request) -> bytes:

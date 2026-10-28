@@ -1,4 +1,4 @@
-"""Rasterize a note page's ink to PNG."""
+"""Rasterize a note page (its PDF background and ink) to PNG."""
 
 import io
 import math
@@ -6,6 +6,7 @@ from collections.abc import Callable, Iterator
 
 from PIL import Image, ImageDraw
 
+from notability_mcp import pdf
 from notability_mcp.bundle import HIGHLIGHTER, Ink, Page, decode_path
 
 type Point = tuple[float, float]
@@ -14,15 +15,23 @@ MAX_EDGE = 1568  # Claude downscales images whose long edge is larger
 _SUPERSAMPLE = 2  # draw at 2x, then downscale: cheap antialiasing
 
 
-def render_page(page: Page, max_edge: int = MAX_EDGE) -> bytes:
-    """PNG of the page's ink on white, long edge `max_edge` px.
+def render_page(page: Page, max_edge: int = MAX_EDGE, background: bytes | None = None) -> bytes:
+    """PNG of the page's ink, long edge `max_edge` px, over `background` (the page's PDF) or white.
 
-    ponytail: PDF backgrounds, shapes and typed text are not drawn yet; add with pypdfium2.
+    ponytail: shapes, images and typed text are not drawn yet.
     """
     k = max_edge / max(page.width, page.height)
     size = (round(page.width * k), round(page.height * k))
     s = k * _SUPERSAMPLE
-    img = Image.new("RGB", (size[0] * _SUPERSAMPLE, size[1] * _SUPERSAMPLE), "white")
+    canvas = (size[0] * _SUPERSAMPLE, size[1] * _SUPERSAMPLE)
+    img = Image.new("RGB", canvas, "white")
+    if (
+        background
+        and page.pdf
+        and pdf.available()
+        and (drawn := pdf.render(background, page.pdf.index, canvas))
+    ):
+        img.paste(drawn)
     draw = ImageDraw.Draw(img)
     # highlighters first so pen strokes stay on top
     for ink in sorted(page.inks, key=lambda i: i.tool != HIGHLIGHTER):

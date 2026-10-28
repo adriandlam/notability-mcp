@@ -59,6 +59,17 @@ def test_modified_notes_go_stale(con):
     assert store.stale_notes(con) == ["n1"]
 
 
+def test_a_new_index_version_reindexes_every_note(con):
+    store.require_index_version(con, "1")
+    index(con, "n1", "page one")
+    index(con, "n2", "eggs")
+    assert store.stale_notes(con) == []
+
+    store.require_index_version(con, "2")
+
+    assert set(store.stale_notes(con)) == {"n1", "n2"}
+
+
 def test_deleted_notes_leave_the_index(con):
     index(con, "n2", "eggs, milk, bread")
 

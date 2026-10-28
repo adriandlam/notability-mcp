@@ -8,6 +8,8 @@ An [MCP](https://modelcontextprotocol.io) server that lets AI assistants search 
 
 - **Search handwriting.** Every page is OCR'd on your Mac with Apple's Vision framework, and
   search is fuzzy, so "conjugate" still finds a page the OCR read as "conjogate".
+- **PDFs too.** Text of the PDFs your notes are written on (slides, past exams) is searchable,
+  and page images show your ink over the PDF page.
 - **See the page.** Any page can be returned as an image, so the model reads your handwriting,
   math and diagrams directly instead of trusting OCR.
 - **Local and private.** Notes are indexed into one SQLite file. The MCP server works offline
@@ -19,7 +21,7 @@ An [MCP](https://modelcontextprotocol.io) server that lets AI assistants search 
 |---|---|
 | `notability_search_notes` | Fuzzy search over handwriting OCR, typed text and titles; returns pages with snippets |
 | `notability_list_notes` | Browse by folder or recency; also lists every folder and the last sync time |
-| `notability_read_note` | A note's OCR text page by page, with unreliable pages flagged |
+| `notability_read_note` | A note's text page by page (handwriting OCR, PDF text), unreliable pages flagged |
 | `notability_get_page_image` | One page as a PNG for the model to read |
 
 All tools are read-only.
@@ -44,9 +46,9 @@ account.
    notability-mcp login
    ```
 
-3. Sync. The first run downloads and OCRs every note (about a quarter second per page);
-   later runs only touch notes that changed. Run it again whenever you want fresh content,
-   or schedule it with cron or launchd.
+3. Sync. The first run downloads every note and its PDFs and OCRs the handwriting (about a
+   tenth of a second per page); later runs only touch notes that changed. Run it again
+   whenever you want fresh content, or schedule it with cron or launchd.
 
    ```sh
    notability-mcp sync
@@ -87,7 +89,7 @@ account.
 
 - OCR handles prose reasonably and math poorly. Search finds the page; read the page image for
   anything exact.
-- Page images show ink only. PDF backgrounds, shapes and typed text are not drawn yet.
+- Page images show ink and PDF pages; shapes, pasted images and typed text are not drawn yet.
 - Notes shared with you by others are not synced yet.
 
 ## Development

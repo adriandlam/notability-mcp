@@ -243,7 +243,8 @@ def read_note(
     start_page: Annotated[int, Field(ge=1)] = 1,
     end_page: Annotated[int | None, Field(ge=1, description="Inclusive; default: last")] = None,
 ) -> str:
-    """A note's text page by page, as Markdown: OCR of the handwriting plus any typed text.
+    """A note's text page by page, as Markdown: OCR of the handwriting, the text of PDF pages
+    the note is written on, and any typed text.
 
     OCR is approximate; pages where it looks unreliable are flagged, so view those with
     notability_get_page_image. Output stops near 25,000 characters and says how to continue.
@@ -261,14 +262,18 @@ def read_note(
     if start_page == 1 and (typed := [t.text for t in texts if t.source == "typed"]):
         out += ["", "## Typed text", *typed]
     by_page = {t.page: t for t in texts if t.source == "handwriting"}
+    pdf_by_page = {t.page: t.text for t in texts if t.source == "pdf"}
     size = sum(len(s) for s in out)
     for number in range(start_page, last + 1):
         page = by_page.get(number)
-        body = page.text if page and page.text else "(no handwriting recognized)"
+        pdf_text = pdf_by_page.get(number)
+        body = page.text if page and page.text else ""
+        if pdf_text:
+            body = f"{body}\n\nPDF text:\n{pdf_text}" if body else f"PDF text:\n{pdf_text}"
         flag = ""
         if page and page.confidence is not None and page.confidence < LOW_CONFIDENCE:
             flag = " (low OCR confidence: view with notability_get_page_image)"
-        section = f"\n## Page {number}{flag}\n{body}"
+        section = f"\n## Page {number}{flag}\n{body or '(no handwriting recognized)'}"
         if size + len(section) > READ_NOTE_MAX_CHARS and number > start_page:
             out.append(
                 f"\n[Truncated: showed pages {start_page}-{number - 1} of {note.page_count}. "
@@ -289,8 +294,8 @@ def get_page_image(
 ) -> Image:
     """One note page as a PNG, to read handwriting, math and drawings exactly as written.
 
-    Prefer this over OCR text whenever accuracy matters. Currently draws ink only: PDF
-    backgrounds, shapes and typed text are not shown.
+    Prefer this over OCR text whenever accuracy matters. Draws the ink over the page's PDF, if
+    any; shapes, pasted images and typed text are not shown.
     """
     con = _db(ctx)
     note = _note(con, note_id)
@@ -300,4 +305,6 @@ def get_page_image(
     pages = decode_bundle(bundle).pages
     if page > len(pages):
         raise ToolError(f"{note.title!r} has {len(pages)} pages; ask for 1-{len(pages)}.")
-    return Image(data=render_page(pages[page - 1], max_edge), format="png")
+    target = pages[page - 1]
+    background = store.asset(con, target.pdf.asset) if target.pdf else None
+    return Image(data=render_page(target, max_edge, background), format="png")

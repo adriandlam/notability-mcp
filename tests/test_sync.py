@@ -68,6 +68,8 @@ def test_sync_downloads_only_notes_that_changed(tmp_path, monkeypatch):
     assert (hit.note_id, hit.source) == (NOTE_ID, "typed")
 
 
-def test_bundle_ids_are_validated_before_use():
+def test_ids_are_validated_before_they_go_in_a_url():
     with pytest.raises(ValueError):
-        api.fetch_bundle("token", "../../graphql", "6a1d9e4c-0b7f-4c1e-9a52-3f0d2b8e7c11")
+        api.fetch_bundle("token", "../../graphql", NOTE_ID)
+    with pytest.raises(ValueError):
+        api.fetch_asset("token", NOTE_ID, "../../graphql")
