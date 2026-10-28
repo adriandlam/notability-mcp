@@ -24,15 +24,14 @@ def recognize(png: bytes) -> list[Line]:
     from Foundation import NSData
 
     request = Vision.VNRecognizeTextRequest.alloc().init()
+    # Revision 3 runs on the Neural Engine, which can fail (e5rtError) or hang forever; revision
+    # 2 read handwritten math as well in a benchmark on 20 pages, and 10x faster.
+    request.setRevision_(Vision.VNRecognizeTextRequestRevision2)
     request.setRecognitionLevel_(Vision.VNRequestTextRecognitionLevelAccurate)
     request.setUsesLanguageCorrection_(True)
     data = NSData.dataWithBytes_length_(png, len(png))
     handler = Vision.VNImageRequestHandler.alloc().initWithData_options_(data, None)
     ok, error = handler.performRequests_error_([request], None)
-    if not ok:
-        # revision 3 can fail with e5rtError for long stretches; revision 2 is a separate engine
-        request.setRevision_(Vision.VNRecognizeTextRequestRevision2)
-        ok, error = handler.performRequests_error_([request], None)
     if not ok:
         raise RuntimeError(f"Vision text recognition failed: {error}")
 
